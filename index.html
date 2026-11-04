@@ -286,7 +286,7 @@ function toggleStage(i){if(selectedStages.has(i)&&selectedStages.size>1)selected
 function home(){stage=0;drawStages();$('#main').innerHTML=`<h2>어떤 방법으로 공부할까요?</h2><p class="muted">단계를 차례로 학습하거나 원하는 문제 유형을 선택할 수 있습니다.</p><div class="homecards">${stages.map((s,i)=>`<button class="homecard" data-go="${i}"><span class="tag">${i+1}단계</span><strong>${s[0]}</strong><span class="muted">${s[1]}</span></button>`).join('')}</div><h3>유형 골라 풀기</h3><div class="types">${types.map(([t,name])=>`<button class="typebtn" data-type="${t}">${name}</button>`).join('')}</div>`;document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>startStage(+b.dataset.go));document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>startType(b.dataset.type))}
 function startStage(i){stage=i;type=stageTypes[i][0];idx=0;drawStages();next()};function startType(t){stage=-1;type=t;idx=0;drawStages();next()};function next(){idx++;stage=[...selectedStages][Math.floor(Math.random()*selectedStages.size)];type=stageTypes[stage][0];shuffleGroupColors();let candidate,signature,previous=recentQuestions.get(type)||[];for(let tries=0;tries<50;tries++){candidate=makeQuestion(type);signature=JSON.stringify(candidate,(key,value)=>key==='prompt'?undefined:value);if(!previous.includes(signature))break;}q=candidate;previous=[signature,...previous].slice(0,Math.min(18,type==='bar'?12:8));recentQuestions.set(type,previous);q.questionId='q-'+Date.now()+'-'+Math.random().toString(36).slice(2);q.wrongRecorded=false;q.correctRecorded=false;feedback='';choice=null;filled=new Set();groups=[];cardPick=[];linePick=null;render()}
 function render(){updatePresence();const name=types.find(x=>x[0]===type)[1];let html=`<div class="topbar"><span class="tag">${stage<0?'유형 선택':`${stage+1}단계 · ${stages[stage][0]}`}</span></div><div id="score-strip" class="score-strip"></div><div class="question">${q.prompt}</div><div class="work">`;
-switch(type){case 'group':html+=`<p class="hint">그림 위를 손가락이나 마우스로 쓱 지나가며 한 묶음씩 만드세요. 빈 공간에서 시작해 사각형으로 둘러싸도 됩니다. 몇 개씩 묶을지는 스스로 생각해 보세요.</p><div class="objects" id="objects" style="--cols:${q.cols}">${Array.from({length:q.total},(_,i)=>`<div class="obj" data-obj="${i}">${q.emoji}</div>`).join('')}</div><div class="groupinfo" id="groupinfo">완성한 묶음: 0개</div><button class="action secondary" id="resetgroups">처음부터 다시 묶기</button><div class="mathline">${q.n*q.k}개는 전체 ${q.total}${q.unit||'개'}의 ${inputFrac()} 입니다.</div>`;break;
+switch(type){case 'group':html+=`<p class="hint">그림을 쓱 지나가거나 그림 주위를 한 바퀴 둘러싸서 묶으세요. 빈 공간에서 시작해 사각형으로 선택해도 됩니다. 몇 개씩 묶을지는 스스로 생각해 보세요.</p><div class="objects" id="objects" style="--cols:${q.cols}">${Array.from({length:q.total},(_,i)=>`<div class="obj" data-obj="${i}">${q.emoji}</div>`).join('')}</div><div class="groupinfo" id="groupinfo">완성한 묶음: 0개</div><button class="action secondary" id="resetgroups">처음부터 다시 묶기</button><div class="mathline">${q.n*q.k}개는 전체 ${q.total}${q.unit||'개'}의 ${inputFrac()} 입니다.</div>`;break;
 case 'amount':case 'remain':html+=`<div class="mathline">답: ${natural()} ${q.unit||'개'}</div>`;break;
 case 'bar':html+=`<p class="hint">칸을 누르거나 드래그하면 색칠됩니다. 다시 누르면 지워집니다.</p><div class="barrow">${Array.from({length:q.whole+1},(_,i)=>`<div class="bar" data-bar="${i}" style="--denominator:${q.d}">${Array.from({length:q.d},(_,j)=>`<div class="segment" data-cell="${i*q.d+j}"></div>`).join('')}</div>`).join('')}</div><div id="count" class="groupinfo">색칠한 칸: 0개</div>`;break;
 case 'classify':html+=`<div class="choices">${['진분수','가분수'].map(s=>`<button class="choice" data-choice="${s}">${s}</button>`).join('')}</div>`;break;
@@ -370,22 +370,43 @@ function initNumericPad(){
 function initGroups(){
  const root=$('#objects');let active=null;
  const used=i=>groups.some(g=>g.includes(i));
- // Select by the full object cell, not a small central hotspot. A child can
- // brush across the edge of a picture without losing that picture.
- const hit=(x,y)=>{const el=document.elementFromPoint(x,y)?.closest('[data-obj]');return el&&root.contains(el)?+el.dataset.obj:null};
- const highlight=()=>root.querySelectorAll('.obj').forEach(el=>el.classList.toggle('selected',!!active&&active.ids.has(+el.dataset.obj)));
- const addHit=(x,y)=>{const i=hit(x,y);if(i!==null&&!used(i))active.ids.add(i)};
- const update=e=>{if(!active)return;const r=root.getBoundingClientRect();if(active.mode==='box'){
- const x=e.clientX-r.left,y=e.clientY-r.top,l=Math.min(active.x,x),t=Math.min(active.y,y),rr=Math.max(active.x,x),bb=Math.max(active.y,y);
- Object.assign(active.box.style,{left:l+'px',top:t+'px',width:(rr-l)+'px',height:(bb-t)+'px'});
- active.ids.clear();root.querySelectorAll('.obj').forEach(el=>{const er=el.getBoundingClientRect(),cx=er.left+er.width/2-r.left,cy=er.top+er.height/2-r.top;if(cx>=l&&cx<=rr&&cy>=t&&cy<=bb&&!used(+el.dataset.obj))active.ids.add(+el.dataset.obj)});
- }else{const dx=e.clientX-active.lastX,dy=e.clientY-active.lastY,steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)/8));for(let j=0;j<=steps;j++)addHit(active.lastX+dx*j/steps,active.lastY+dy*j/steps);active.lastX=e.clientX;active.lastY=e.clientY}
- highlight();};
- root.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(active)return;e.preventDefault();const r=root.getBoundingClientRect(),onObj=hit(e.clientX,e.clientY)!==null;active={id:e.pointerId,mode:onObj?'brush':'box',ids:new Set(),x:e.clientX-r.left,y:e.clientY-r.top,lastX:e.clientX,lastY:e.clientY,box:null};if(!onObj){active.box=document.createElement('div');active.box.className='lasso';root.appendChild(active.box)}root.setPointerCapture(e.pointerId);update(e)});
+ const cells=()=>[...root.querySelectorAll('[data-obj]')];
+ const point=(el)=>{const r=el.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]};
+ const hit=(x,y)=>{let found=null,dist=Infinity;for(const el of cells()){const r=el.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom){const [cx,cy]=point(el),d=Math.hypot(cx-x,cy-y);if(d<dist){found=+el.dataset.obj;dist=d}}}return found};
+ const insidePolygon=(x,y,poly)=>{let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside}return inside};
+ const addAt=(x,y)=>{const i=hit(x,y);if(i!==null&&!used(i))active.ids.add(i)};
+ const refresh=()=>cells().forEach(el=>el.classList.toggle('selected',!!active&&active.ids.has(+el.dataset.obj)));
+ const update=e=>{if(!active)return;const x=e.clientX,y=e.clientY;const last=active.points[active.points.length-1];if(Math.hypot(x-last[0],y-last[1])>2)active.points.push([x,y]);
+ if(active.mode==='box'){
+ const r=root.getBoundingClientRect(),l=Math.min(active.startX,x),t=Math.min(active.startY,y),right=Math.max(active.startX,x),bottom=Math.max(active.startY,y);
+ Object.assign(active.box.style,{left:l-r.left+'px',top:t-r.top+'px',width:right-l+'px',height:bottom-t+'px'});
+ active.ids.clear();for(const el of cells()){const [cx,cy]=point(el);if(cx>=l&&cx<=right&&cy>=t&&cy<=bottom&&!used(+el.dataset.obj))active.ids.add(+el.dataset.obj)}
+ }else{
+ const steps=Math.max(1,Math.ceil(Math.hypot(x-last[0],y-last[1])/5));for(let i=0;i<=steps;i++)addAt(last[0]+(x-last[0])*i/steps,last[1]+(y-last[1])*i/steps);
+ }
+ refresh()};
+ root.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(active)return;e.preventDefault();const onObj=hit(e.clientX,e.clientY)!==null;active={id:e.pointerId,mode:onObj?'brush':'box',ids:new Set(),startX:e.clientX,startY:e.clientY,points:[[e.clientX,e.clientY]],box:null};
+ if(!onObj){active.box=document.createElement('div');active.box.className='lasso';root.appendChild(active.box)}root.setPointerCapture(e.pointerId);update(e)});
  root.addEventListener('pointermove',e=>{if(active&&e.pointerId===active.id){e.preventDefault();update(e)}});
- const finish=e=>{if(!active||e.pointerId!==active.id)return;update(e);const ids=[...active.ids];active.box?.remove();active=null;if(ids.length>=1&&groups.length<q.d)groups.push(ids);paintGroups()};
- root.addEventListener('pointerup',finish);root.addEventListener('pointercancel',e=>{if(!active)return;active.box?.remove();active=null;paintGroups()});
- $('#resetgroups').onclick=()=>{groups=[];paintGroups()};paintGroups();
+ const finish=e=>{if(!active||e.pointerId!==active.id)return;update(e);
+ // A loop drawn around pictures selects the pictures inside it, not merely
+ // those directly touched by the pointer. This works for horizontal, square,
+ // and mixed arrangements.
+ const path=active.points;if(active.mode==='brush'&&path.length>=5){
+ const [sx,sy]=path[0],[ex,ey]=path[path.length-1];
+ const r=cells()[0]?.getBoundingClientRect();const closeLimit=Math.max(28,(r?.width||40)*.8);
+ if(Math.hypot(sx-ex,sy-ey)<=closeLimit){
+ for(const el of cells()){const [cx,cy]=point(el);if(insidePolygon(cx,cy,path)&&!used(+el.dataset.obj))active.ids.add(+el.dataset.obj)}
+ }
+ }
+ const ids=[...active.ids];active.box?.remove();active=null;
+ if(ids.length&&groups.length<q.d)groups.push(ids);
+ paintGroups();
+ };
+ root.addEventListener('pointerup',finish);
+ root.addEventListener('pointercancel',e=>{if(!active)return;active.box?.remove();active=null;paintGroups()});
+ $('#resetgroups').onclick=()=>{groups=[];paintGroups()};
+ paintGroups();
 }
 function paintGroups(){
  const root=$('#objects');if(!root)return;
@@ -400,7 +421,7 @@ function paintGroups(){
   const right=Math.max(...rects.map(r=>r.right))-rr.left-3,bottom=Math.max(...rects.map(r=>r.bottom))-rr.top-3;
   const ns='http://www.w3.org/2000/svg',path=document.createElementNS(ns,'rect');
   path.setAttribute('x',left);path.setAttribute('y',top);path.setAttribute('width',right-left);path.setAttribute('height',bottom-top);path.setAttribute('rx','16');path.setAttribute('fill','none');path.setAttribute('stroke',themeAccents[0]);path.setAttribute('stroke-width','3.5');overlay.appendChild(path);
-  const label=document.createElementNS(ns,'text');label.setAttribute('x',left+9);label.setAttribute('y',top+18);label.setAttribute('fill',themeAccents[0]);label.textContent=`${gi+1}묶음`;overlay.appendChild(label);
+  const label=document.createElementNS(ns,'text');label.setAttribute('x',left+9);label.setAttribute('y',top+18);label.setAttribute('fill',themeAccents[0]);label.textContent=`${gi+1}묶음 · ${g.length}개`;overlay.appendChild(label);
  });
  const count=groups.reduce((a,g)=>a+g.length,0);$('#groupinfo').textContent=`완성한 묶음: ${groups.length}개 · 묶은 그림: ${count}/${q.total}${q.unit||'개'}`;
 }
