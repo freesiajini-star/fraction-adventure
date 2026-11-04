@@ -25,6 +25,11 @@
 @media(min-width:1050px) and (orientation:landscape){.shell{padding:8px 12px}.stage{min-height:60px}.stage small{font-size:10px}.rank-box ol{max-height:158px;overflow:auto}}
 @media(max-width:900px){.shell{padding:8px}.stage strong{font-size:12px}.stage small{font-size:9px}.layout-main{grid-template-columns:1fr 1fr}.work.numeric-work{grid-template-columns:minmax(0,1fr) 145px}.numeric-pad button{min-height:37px;font-size:18px}}
 @media(max-width:690px){.stages{display:flex;overflow-x:auto}.stage{min-width:96px}.layout-main{grid-template-columns:1fr}.other-grid{grid-template-columns:repeat(2,1fr)}.work.numeric-work{grid-template-columns:minmax(0,1fr) 145px}}
+@media(min-width:691px){.layout-main{grid-template-columns:minmax(0,2fr) minmax(0,1fr)!important}}
+.animal-ranking .rank-animal{display:inline-block;font-size:1.1em;margin:0 .2em}
+.animal-ranking li{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.animal-ranking .rank-name{min-width:0;overflow-wrap:anywhere}
+.animal-ranking .rank-score{flex-shrink:0;font-variant-numeric:tabular-nums}
 </style><style id="v17-layout">
 header{min-height:250px!important;height:250px!important;padding:12px 20px!important;background:transparent!important;border:0!important;box-shadow:none!important;display:flex!important;justify-content:flex-end!important;align-items:flex-start!important}
 header>div:first-child{display:none!important}
@@ -478,11 +483,53 @@ const monthKey=()=>{const d=new Date();return d.getFullYear()+'-'+pad2(d.getMont
 const profileKey=()=>{const cl=document.querySelector('#classNo').value,no=document.querySelector('#studentNo').value;return cl&&no?'c'+cl+'s'+pad2(no):null};
 function studentIdentity(){return (document.querySelector('#nick').textContent||'이름 없음')+' ('+($('#classNo').value||'?')+'-'+($('#studentNo').value||'?')+')'}
 function nicknameFor(c,n){const seed=(new Date().getFullYear()*37+(new Date().getMonth()+1)*101+Number(c)*43+Number(n)*97);return ANIMAL_NICKNAMES[((seed%ANIMAL_NICKNAMES.length)+ANIMAL_NICKNAMES.length)%ANIMAL_NICKNAMES.length]}
-function updateIdentity(){const c=$('#classNo').value,n=$('#studentNo').value;const nickname=c&&n?nicknameFor(c,n):'학급·번호 선택';$('#nick').textContent=nickname;$('#student').value=nickname;renderStats();renderScoreStrip();renderLeaderboards();}
-function rankRows(stageNumber){const source={...remoteStudents};const key=profileKey();if(key){const local=localScores();source[key]={...(source[key]||{}),nickname:$('#nick').textContent,classNo:$('#classNo').value,total:local.total,stages:local.stages}}const list=Object.values(source).map(x=>{const a=stageNumber==null?x.total:x.stages?.[stageNumber];return {name:x.nickname||'동물',cl:x.classNo||'?',correct:Number(a?.correct||0),wrong:Number(a?.wrong||0),score:Number(a?.score??(Number(a?.correct||0)*(stageNumber>=10?10:1)-Number(a?.wrong||0)))}});return list.filter(x=>x.correct||x.wrong).sort((a,b)=>b.score-a.score||b.correct-a.correct||a.wrong-b.wrong)}
-function rankHTML(rows,max=8){return rows.length?'<ol>'+rows.slice(0,max).map((x,i)=>`<li><span>${i+1}위 ${escapeHTML(x.name)} <small>${x.cl?x.cl+'반':''}</small></span><span class="rank-score">${x.score}점</span></li>`).join('')+'</ol>':'<div class="empty">아직 기록이 없습니다.</div>'}
+function updateIdentity(){const c=$('#classNo').value,n=$('#studentNo').value;const nickname=studentConnected?$('#nick').textContent:(c&&n?nicknameFor(c,n):'학급·번호 선택');$('#nick').textContent=nickname;$('#student').value=nickname;renderStats();renderScoreStrip();renderLeaderboards();}
+const animalIcons={'고양이':'🐱','강아지':'🐶','토끼':'🐰','여우':'🦊','곰':'🐻','호랑이':'🐯','사자':'🦁','돼지':'🐷','원숭이':'🐵','다람쥐':'🐿️','비버':'🦫','고슴도치':'🦔','코끼리':'🐘','기린':'🦒','얼룩말':'🦓','말':'🐴','소':'🐮','양':'🐑','사슴':'🦌','늑대':'🐺','너구리':'🦝','수달':'🦦','펭귄':'🐧','오리':'🦆','백조':'🦢','독수리':'🦅','부엉이':'🦉','올빼미':'🦉','닭':'🐔','병아리':'🐥','공작':'🦚','앵무새':'🦜','개구리':'🐸','거북이':'🐢','악어':'🐊','뱀':'🐍','도마뱀':'🦎','공룡':'🦕','고래':'🐳','돌고래':'🐬','상어':'🦈','문어':'🐙','오징어':'🦑','물고기':'🐟','복어':'🐡','해파리':'🪼','불가사리':'⭐','게':'🦀','새우':'🦐','조개':'🐚','나비':'🦋','잠자리':'🪰','무당벌레':'🐞','반딧불이':'✨','사슴벌레':'🪲','장수풍뎅이':'🪲','개미':'🐜','꿀벌':'🐝','달팽이':'🐌'};
+Object.assign(animalIcons,{'표범':'🐆','치타':'🐆','코뿔소':'🦏','판다':'🐼','코알라':'🐨','캥거루':'🦘','나무늘보':'🦥','햄스터':'🐹','라쿤':'🦝','산양':'🐐','염소':'🐐','알파카':'🦙','낙타':'🐪','당나귀':'🫏','고릴라':'🦍','침팬지':'🐒','여우원숭이':'🐒','박쥐':'🦇','북극곰':'🐻‍❄️','카피바라':'🦫','미어캣':'🦦','쿼카':'🐻','라마':'🦙','스컹크':'🦨','멧돼지':'🐗','바다코끼리':'🦭','재규어':'🐆','참새':'🐦','꾀꼬리':'🐤','까치':'🐦','제비':'🐦','매':'🦅','솔개':'🦅','두루미':'🦩','황새':'🦩','백로':'🦢','왜가리':'🦢','원앙':'🦆','거위':'🪿','갈매기':'🐦','타조':'🦤','플라밍고':'🦩','딱따구리':'🐦','물총새':'🐦','종다리':'🐦','꿩':'🐦','청둥오리':'🦆','투칸':'🦜','카나리아':'🐤','홍관조':'🐦','물까치':'🐦','향유고래':'🐳','범고래':'🐋','가오리':'🐟','물개':'🦭','바다사자':'🦭','흰동가리':'🐠','소라':'🐚','소라게':'🐚','일각고래':'🐋','금붕어':'🐠'});
+function animalIcon(name){return animalIcons[String(name||'').trim()]||'🐾'}
+function scorePart(x,sn){const v=sn==null?x?.total:x?.stages?.[sn];const correct=Number(v?.correct||0),wrong=Number(v?.wrong||0);return {correct,wrong,score:Number(v?.score??(correct*(sn>=10?10:1)-wrong))}}
+function rankRows(stageNumber,onlyClass=false){
+ const source={...remoteStudents},key=profileKey(),myClass=Number($('#classNo').value);
+ if(key&&studentConnected){
+  const server=source[key];
+  if(!server){const local=localScores();source[key]={nickname:$('#nick').textContent,classNo:myClass,total:local.total,stages:local.stages}}
+  else{
+   const copy={...server,total:{...server.total},stages:{...server.stages}};
+   for(const e of pendingResults.filter(x=>x.name===studentIdentity())){
+    const st=Number(e.stage),delta=e.ok?(st>=10?10:1):-1;
+    copy.stages[st]={...copy.stages[st]};
+    for(const target of [copy.total,copy.stages[st]]){
+     target.correct=Number(target.correct||0)+(e.ok?1:0);
+     target.wrong=Number(target.wrong||0)+(e.ok?0:1);
+     target.score=Number(target.score||0)+delta;
+    }
+   }
+   source[key]=copy;
+  }
+ }
+ return Object.values(source).filter(x=>!onlyClass||Number(x.classNo)===myClass)
+ .map(x=>({name:x.nickname||'동물',cl:Number(x.classNo)||0,...scorePart(x,stageNumber)}))
+ .filter(x=>x.correct||x.wrong).sort((x,y)=>y.score-x.score||y.correct-x.correct||x.wrong-y.wrong||x.name.localeCompare(y.name,'ko'));
+}
+function rankHTML(rows,max=8,opt={}){
+ return rows.length?'<ol class="animal-ranking">'+rows.slice(0,max).map((x,i)=>`<li><span class="rank-name">${i+1}위 <span class="rank-animal">${opt.classes?'🏫':animalIcon(x.name)}</span> ${escapeHTML(x.name)}${opt.showClass&&x.cl?` <small>${x.cl}반</small>`:''}</span><span class="rank-score">${opt.average?x.score.toFixed(1):x.score}점${opt.average?' (평균)':''}</span></li>`).join('')+'</ol>':'<div class="empty">아직 기록이 없습니다.</div>'
+}
 function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function renderLeaderboards(){const sn=stage+1;$('#currentRankTitle').textContent=sn+'단계 순위';$('#currentRank').innerHTML=rankHTML(rankRows(sn));$('#totalRank').innerHTML=rankHTML(rankRows(null));const classes={};for(const x of Object.values(remoteStudents)){const c=x.classNo;if(!c)continue;if(!classes[c])classes[c]={name:c+'반',score:0,correct:0,wrong:0};classes[c].correct+=Number(x.total?.correct||0);classes[c].wrong+=Number(x.total?.wrong||0);classes[c].score+=Number(x.total?.score??(Number(x.total?.correct||0)-Number(x.total?.wrong||0)))}$('#classRank').innerHTML=rankHTML(Object.values(classes).map(x=>({...x,cl:''})).sort((a,b)=>b.score-a.score),12);$('#otherRanks').innerHTML=Array.from({length:activeCourse==='advanced'?7:9},(_,i)=>i+(activeCourse==='advanced'?10:1)).filter(i=>i!==sn).map(i=>`<div class="rank-box"><h3>${i}단계</h3>${rankHTML(rankRows(i),4)}</div>`).join('')}
+function renderLeaderboards(){
+ const sn=stage+1;
+ $('#currentRankTitle').textContent=sn+'단계 순위';
+ $('#currentRank').innerHTML=rankHTML(rankRows(sn,true),40);
+ $('#totalRank').innerHTML=rankHTML(rankRows(null,true),40);
+ const classes=new Map();
+ for(const x of rankRows(null,false)){
+  const c=Number(x.cl);if(!c)continue;
+  if(!classes.has(c))classes.set(c,{name:c+'반',cl:c,score:0,count:0});
+  const v=classes.get(c);v.score+=x.score;v.count++;
+ }
+ const avg=[...classes.values()].map(x=>({...x,score:x.count?x.score/x.count:0})).sort((x,y)=>y.score-x.score||x.cl-y.cl);
+ $('#classRank').innerHTML=rankHTML(avg,12,{classes:true,average:true});
+ $('#otherRanks').innerHTML=Array.from({length:activeCourse==='advanced'?7:9},(_,i)=>i+(activeCourse==='advanced'?10:1)).filter(i=>i!==sn).map(i=>`<div class="rank-box"><h3>${i}단계</h3>${rankHTML(rankRows(i,true),4)}</div>`).join('');
+}
 function localScores(){const byStage={};let total={correct:0,wrong:0};for(let i=1;i<=16;i++){const s=getScore(i);byStage[i]={correct:s.correct,wrong:s.wrong,score:s.score};total.correct+=s.correct;total.wrong+=s.wrong}total.score=getScore(null).score;return {total,stages:byStage}}
 
 // Keep existing fractionAdventure/monthly aggregates and identity paths intact.
