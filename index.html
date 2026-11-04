@@ -370,13 +370,15 @@ function initNumericPad(){
 function initGroups(){
  const root=$('#objects');let active=null;
  const used=i=>groups.some(g=>g.includes(i));
- const hit=(x,y)=>{const el=document.elementFromPoint(x,y)?.closest('[data-obj]');if(!el||!root.contains(el))return null;const r=el.getBoundingClientRect(),size=Math.min(r.width,r.height)*.78;return Math.abs(x-(r.left+r.width/2))<=size/2&&Math.abs(y-(r.top+r.height/2))<=size/2?+el.dataset.obj:null};
+ // Select by the full object cell, not a small central hotspot. A child can
+ // brush across the edge of a picture without losing that picture.
+ const hit=(x,y)=>{const el=document.elementFromPoint(x,y)?.closest('[data-obj]');return el&&root.contains(el)?+el.dataset.obj:null};
  const highlight=()=>root.querySelectorAll('.obj').forEach(el=>el.classList.toggle('selected',!!active&&active.ids.has(+el.dataset.obj)));
  const addHit=(x,y)=>{const i=hit(x,y);if(i!==null&&!used(i))active.ids.add(i)};
  const update=e=>{if(!active)return;const r=root.getBoundingClientRect();if(active.mode==='box'){
  const x=e.clientX-r.left,y=e.clientY-r.top,l=Math.min(active.x,x),t=Math.min(active.y,y),rr=Math.max(active.x,x),bb=Math.max(active.y,y);
  Object.assign(active.box.style,{left:l+'px',top:t+'px',width:(rr-l)+'px',height:(bb-t)+'px'});
- active.ids.clear();root.querySelectorAll('.obj').forEach(el=>{const er=el.getBoundingClientRect(),cx=er.left+er.width/2-r.left,cy=er.top+er.height/2-r.top;if(er.left-r.left<=rr&&er.right-r.left>=l&&er.top-r.top<=bb&&er.bottom-r.top>=t&&!used(+el.dataset.obj))active.ids.add(+el.dataset.obj)});
+ active.ids.clear();root.querySelectorAll('.obj').forEach(el=>{const er=el.getBoundingClientRect(),cx=er.left+er.width/2-r.left,cy=er.top+er.height/2-r.top;if(cx>=l&&cx<=rr&&cy>=t&&cy<=bb&&!used(+el.dataset.obj))active.ids.add(+el.dataset.obj)});
  }else{const dx=e.clientX-active.lastX,dy=e.clientY-active.lastY,steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)/8));for(let j=0;j<=steps;j++)addHit(active.lastX+dx*j/steps,active.lastY+dy*j/steps);active.lastX=e.clientX;active.lastY=e.clientY}
  highlight();};
  root.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;if(active)return;e.preventDefault();const r=root.getBoundingClientRect(),onObj=hit(e.clientX,e.clientY)!==null;active={id:e.pointerId,mode:onObj?'brush':'box',ids:new Set(),x:e.clientX-r.left,y:e.clientY-r.top,lastX:e.clientX,lastY:e.clientY,box:null};if(!onObj){active.box=document.createElement('div');active.box.className='lasso';root.appendChild(active.box)}root.setPointerCapture(e.pointerId);update(e)});
