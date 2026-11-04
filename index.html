@@ -421,21 +421,7 @@ function initGroups(){
  for(const el of cells()){const [cx,cy]=point(el);if(insidePolygon(cx,cy,path)&&!used(+el.dataset.obj))active.ids.add(+el.dataset.obj)}
  }
  }
- // A group is displayed as a rectangular enclosure. Its membership must
- // be that exact rectangle, not the subset touched by the finger.
- // Reconcile the selection BEFORE saving the group, on both phone and tablet.
- // Previously the border enclosed 4 objects while the stored IDs contained 2-3.
- if(active.ids.size){
-   const all=cells(), selected=all.filter(el=>active.ids.has(+el.dataset.obj));
-   const xs=selected.map(el=>point(el)[0]),ys=selected.map(el=>point(el)[1]);
-   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
-   const tolerance=2;
-   for(const el of all){
-     const i=+el.dataset.obj,[cx,cy]=point(el);
-     if(!used(i)&&cx>=minX-tolerance&&cx<=maxX+tolerance&&cy>=minY-tolerance&&cy<=maxY+tolerance){active.ids.add(i)}
-   }
- }
- const ids=[...active.ids].sort((a,b)=>a-b);active.box?.remove();active=null;
+ const ids=[...active.ids];active.box?.remove();active=null;
  if(ids.length&&groups.length<q.d)groups.push(ids);
  paintGroups();
  };
