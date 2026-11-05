@@ -377,6 +377,7 @@ function initNumericPad(){
  });
  activate(ordered[0]);
 }
+function connectedGroup(ids,cols){if(!ids.length)return false;const selected=new Set(ids),seen=new Set([ids[0]]),todo=[ids[0]];while(todo.length){const i=todo.pop(),col=i%cols;const neighbors=[i-cols,i+cols];if(col>0)neighbors.push(i-1);if(col<cols-1)neighbors.push(i+1);for(const j of neighbors)if(selected.has(j)&&!seen.has(j)){seen.add(j);todo.push(j)}}return seen.size===selected.size}
 function initGroups(){
  const root=$('#objects');let active=null,frame=0;
  const used=i=>groups.some(g=>g.includes(i));
@@ -394,7 +395,7 @@ function initGroups(){
  root.addEventListener('pointermove',e=>{if(active?.id===e.pointerId){e.preventDefault();for(const point of e.getCoalescedEvents?.()||[])update(point);update(e)}});
  root.addEventListener('pointerup',e=>{if(active?.id!==e.pointerId)return;update(e);const path=active.points,first=path[0],last=path.at(-1),sample=picture(cells()[0]);let area=0;for(let i=0;i<path.length;i++){const a=path[i],b=path[(i+1)%path.length];area+=a[0]*b[1]-b[0]*a[1]}const closed=path.length>=5&&Math.hypot(first[0]-last[0],first[1]-last[1])<Math.max(25,sample.r*1.6)&&Math.abs(area)/2>sample.r*sample.r;
   if(closed){active.ids.clear();for(const el of cells()){const p=picture(el);const near=path.some((a,i)=>segmentDistance(p,a,path[(i+1)%path.length])<=p.r*.25);if(!used(+el.dataset.obj)&&(inside(p.x,p.y,path)||near))active.ids.add(+el.dataset.obj)}}
-  const ids=[...active.ids].sort((a,b)=>a-b);active.box?.remove();active=null;if(ids.length)groups.push(ids);paintGroups();
+  const ids=[...active.ids].sort((a,b)=>a-b);active.box?.remove();active=null;const cols=Number(root.style.getPropertyValue('--display-cols')||q.cols);const accepted=!ids.length||connectedGroup(ids,cols);if(ids.length&&accepted)groups.push(ids);paintGroups();if(!accepted){const notice=document.createElement('div');notice.className='group-repair-note';notice.setAttribute('role','status');notice.textContent='사이의 그림을 건너뛰지 말고, 서로 붙어 있는 그림끼리 묶어 주세요.';root.parentElement.querySelector('.group-edit-controls').appendChild(notice)};
  });
  const cancel=()=>{if(active){active.box?.remove();active=null;paintGroups()}};root.addEventListener('pointercancel',cancel);root.addEventListener('lostpointercapture',cancel);
  $('#resetgroups').onclick=()=>{groups=[];paintGroups()};
