@@ -12,7 +12,7 @@ function applyResults(current,events,identity){
  const x=JSON.parse(JSON.stringify(current||{}));Object.assign(x,identity);x.stages=x.stages||{};x.processedEvents=x.processedEvents||{};x.activity=x.activity||{};
  x.total=x.total||{correct:0,wrong:0,score:0,totalSolved:0};
  for(const r of events.slice().sort((a,b)=>Number(a.at)-Number(b.at))){if(x.processedEvents[r.eventId])continue;const stage=Number(r.stage);if(!Number.isInteger(stage)||stage<1||stage>16)continue;
-  const increment=a=>{a=a||{};a.correct=Number(a.correct||0)+(r.ok?1:0);a.wrong=Number(a.wrong||0)+(r.ok?0:1);a.score=Number(a.score||0)+(r.ok?(stage>=10?10:1):-1);a.totalSolved=Number(a.totalSolved??(a.correct+a.wrong-1))+1;return a};
+  const increment=a=>{a=a||{};a.correct=Number(a.correct||0)+(r.ok?1:0);a.wrong=Number(a.wrong||0)+(r.ok?0:1);a.score=Number(a.score||0)+(r.ok?(global.FractionScoring?global.FractionScoring.eventPoints(r):(stage>=10?10:1)):-1);a.totalSolved=Number(a.totalSolved??(a.correct+a.wrong-1))+1;return a};
   x.stages[stage]=increment(x.stages[stage]);x.total=increment(x.total);
   const ts=Number(r.at),day=dateKey(new Date(ts));const activity=x.activity[day]||{sessions:{}};activity.sessions=activity.sessions||{};
   const ordered=Object.entries(activity.sessions).filter(([,s])=>Number(s.endAt)<=ts).sort((a,b)=>b[1].endAt-a[1].endAt);const last=ordered[0];
@@ -21,5 +21,11 @@ function applyResults(current,events,identity){
  }
  x.totalSolved=Number(x.total.totalSolved||0);x.totalCorrect=Number(x.total.correct||0);x.solved=x.totalCorrect;return x;
 }
-const api={ROOT,GAP,pad,dateKey,monthKey,addDays,sessionsFor,dayTotal,riskFor,applyResults};global.FractionData=api;if(typeof module!=='undefined')module.exports=api;
+const NICKNAME_ICONS={고양이:'🐱',토끼:'🐰',여우:'🦊',늑대:'🐺',사자:'🦁',호랑이:'🐯',표범:'🐆',치타:'🐆',코끼리:'🐘',기린:'🦒',얼룩말:'🦓',코뿔소:'🦏',판다:'🐼',코알라:'🐨',캥거루:'🦘',나무늘보:'🦥',고슴도치:'🦔',다람쥐:'🐿️',햄스터:'🐹',수달:'🦦',비버:'🦫',라쿤:'🦝',너구리:'🦝',사슴:'🦌',산양:'🐐',염소:'🐐',양:'🐑',알파카:'🦙',낙타:'🐪',당나귀:'🫏',말:'🐴',고릴라:'🦍',침팬지:'🐵',여우원숭이:'🐒',박쥐:'🦇',곰:'🐻',북극곰:'🐻‍❄️',카피바라:'🐹',미어캣:'🐾',쿼카:'🐾',라마:'🦙',스컹크:'🦨',멧돼지:'🐗',바다코끼리:'🦭',재규어:'🐆',참새:'🐦',꾀꼬리:'🎶',까치:'🐦',비둘기:'🕊️',제비:'🐦',독수리:'🦅',매:'🦅',솔개:'🦅',부엉이:'🦉',올빼미:'🦉',두루미:'🪶',황새:'🦢',백로:'🪿',왜가리:'🐦',원앙:'🦆',거위:'🪿',백조:'🦢',펭귄:'🐧',갈매기:'🐦',앵무새:'🦜',공작:'🦚',타조:'🪶',플라밍고:'🦩',딱따구리:'🐦',물총새:'🐦',종다리:'🐦',꿩:'🐦',청둥오리:'🦆',투칸:'🐦',카나리아:'🐤',홍관조:'🐦',물까치:'🐦',돌고래:'🐬',향유고래:'🐋',범고래:'🐋',상어:'🦈',가오리:'🐟',문어:'🐙',오징어:'🦑',해파리:'🪼',불가사리:'⭐',해마:'🐠',거북이:'🐢',물개:'🦭',바다사자:'🦭',흰동가리:'🐠',소라:'🐚',소라게:'🦀',일각고래:'🐋',게:'🦀',금붕어:'🐟',나비:'🦋',잠자리:'🪰',무당벌레:'🐞',반딧불이:'✨',사슴벌레:'🪲',장수풍뎅이:'🪲',개미:'🐜',꿀벌:'🐝',달팽이:'🐌'};
+const nicknameText=name=>!name||name==='—'?'—':(NICKNAME_ICONS[name]||'⭐')+' '+name;
+const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nicknameHTML=name=>!name||name==='—'?'—':`<span class="nick-icon" aria-hidden="true">${NICKNAME_ICONS[name]||'⭐'}</span> ${escape(name)}`;
+function studentRankRows(students,classNo,stage){if(!Number(classNo))return [];return Object.entries(students).filter(([,x])=>Number(x.classNo)===Number(classNo)).map(([key,x])=>{const a=stage==null?x.total:x.stages?.[stage];return {key,name:x.nickname||'동물',cl:Number(x.classNo),studentNo:Number(x.studentNo),correct:Number(a?.correct||0),wrong:Number(a?.wrong||0),score:Number(a?.score||0)}}).filter(x=>x.correct+x.wrong>0).sort((a,b)=>b.score-a.score||b.correct-a.correct||a.wrong-b.wrong||a.studentNo-b.studentNo)}
+function classAverageRanks(students){const classes=new Map();for(const x of Object.values(students)){const c=Number(x.classNo);if(!c||Number(x.total?.correct||0)+Number(x.total?.wrong||0)<=0)continue;const row=classes.get(c)||{classNo:c,count:0,total:0};row.count++;row.total+=Number(x.total?.score||0);classes.set(c,row)}return [...classes.values()].map(x=>({...x,average:x.total/x.count})).sort((a,b)=>b.average-a.average||b.total-a.total||a.classNo-b.classNo)}
+const api={ROOT,GAP,pad,dateKey,monthKey,addDays,sessionsFor,dayTotal,riskFor,applyResults,NICKNAME_ICONS,nicknameText,nicknameHTML,studentRankRows,classAverageRanks};global.FractionData=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

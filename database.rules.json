@@ -1,0 +1,40 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "fractionAdventure": {
+      "monthly": {
+        "$month": {
+          "students": {
+            ".read": "auth != null",
+            "$student": {
+              ".write": "auth != null && $month.matches(/^[0-9]{4}-[0-9]{2}$/) && $student.matches(/^c[0-9]{1,2}s[0-9]{2}$/)",
+              ".validate": "newData.hasChildren(['classNo', 'studentNo', 'nickname'])",
+              "classNo": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 12"
+              },
+              "studentNo": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 40"
+              },
+              "nickname": {
+                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20"
+              },
+              "currentStage": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 16"
+              }
+            }
+          }
+        }
+      },
+      "settings": {
+        "correctPoints": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          "$stage": {
+            ".validate": "$stage.matches(/^([1-9]|1[0-6])$/) && newData.isNumber() && newData.val() % 1 == 0 && newData.val() >= 1 && newData.val() <= 100"
+          }
+        }
+      }
+    }
+  }
+}
