@@ -121,8 +121,10 @@ box-shadow:inset 0 1px 2px #fff,0 0 0 2px #ffffff9c,0 0 12px #9edbff!important;a
 .explanation-head{font-weight:700;margin-bottom:10px}
 .explanation-groups{display:flex;gap:7px;flex-wrap:wrap}
 .explanation-group{border:2px solid #a9b4bc;border-radius:10px;padding:7px;min-width:64px;max-width:135px;flex:1;text-align:center;background:#fff}
-.explanation-group.counted{border-color:var(--current-accent);background:var(--current-tint)}
-.explanation-group.spent{opacity:.48}
+.explanation-group.counted{border-color:var(--current-accent);background:color-mix(in srgb,var(--current-accent) 25%,white)}
+.explanation-group:is(.spent,.rest){position:relative;isolation:isolate}
+.explanation-group:is(.spent,.rest)::after{content:"";position:absolute;inset:-2px;border-radius:inherit;background:rgba(255,255,255,.8);z-index:1;pointer-events:none}
+
 .explanation-label{font-size:10px;font-weight:800;margin-bottom:5px;white-space:nowrap}
 .explanation-items{display:flex;flex-wrap:wrap;justify-content:center;gap:3px}
 .explanation-group span{font-size:18px;display:inline-block;margin:1px}
@@ -332,13 +334,6 @@ text-shadow:0 1px 1px #0003;transition:transform .15s,filter .15s}
 /* Consistent equation text: dark ink except the final answer. */
 .main-panel .quantity-explanation .v182-clock-calculations>div{color:#202020!important}
 .main-panel .quantity-explanation .v182-clock-calculations>div b{color:var(--current-accent)!important}
-/* Discrete quantities: use clear light theme hue, never washed-out gray or opacity. */
-.main-panel .quantity-explanation .explanation-group.spent,
-.main-panel .quantity-explanation .explanation-group.rest{opacity:1!important;background:var(--v186-chart-pale,#fff0b8)!important;border-color:var(--current-accent)!important}
-.main-panel .quantity-explanation .explanation-group.spent .explanation-label,
-.main-panel .quantity-explanation .explanation-group.rest .explanation-label{color:#303030!important}
-.main-panel .quantity-explanation .explanation-group.spent .explanation-items,
-.main-panel .quantity-explanation .explanation-group.rest .explanation-items{opacity:1!important}
 </style></head><body class="theme-sphinx">
 <header><div><h1>분수 탐험대</h1><small>3학년 · 분수 개념부터 크기 비교까지</small></div><div class="identity"><label>반 <select id="classNo"><option value="">선택</option><option value="1">1반</option><option value="2">2반</option><option value="3">3반</option><option value="4">4반</option><option value="5">5반</option><option value="6">6반</option><option value="7">7반</option><option value="8">8반</option><option value="9">9반</option><option value="10">10반</option><option value="11">11반</option><option value="12">12반</option></select></label><label>번호 <select id="studentNo"><option value="">선택</option><option value="1">1번</option><option value="2">2번</option><option value="3">3번</option><option value="4">4번</option><option value="5">5번</option><option value="6">6번</option><option value="7">7번</option><option value="8">8번</option><option value="9">9번</option><option value="10">10번</option><option value="11">11번</option><option value="12">12번</option><option value="13">13번</option><option value="14">14번</option><option value="15">15번</option><option value="16">16번</option><option value="17">17번</option><option value="18">18번</option><option value="19">19번</option><option value="20">20번</option><option value="21">21번</option><option value="22">22번</option><option value="23">23번</option><option value="24">24번</option><option value="25">25번</option><option value="26">26번</option><option value="27">27번</option><option value="28">28번</option><option value="29">29번</option><option value="30">30번</option><option value="31">31번</option><option value="32">32번</option><option value="33">33번</option><option value="34">34번</option><option value="35">35번</option><option value="36">36번</option><option value="37">37번</option><option value="38">38번</option><option value="39">39번</option><option value="40">40번</option></select></label><span class="nickname" id="nick">학급·번호 선택</span><label>배경 <select id="themeSelect"><option value="sphinx">스핑크스 퀴즈</option><option value="chalk">차분한 칠판</option></select></label><span class="connection" id="connection" hidden aria-hidden="true">연결 준비 중</span></div><div id="v22Student"><div class="line"><span class="label">봉산초등학교 3학년</span><input id="v22Class" inputmode="numeric" maxlength="2" aria-label="반"><span class="label">반</span><input id="v22Number" inputmode="numeric" maxlength="2" aria-label="번호"><span class="label">번</span><button id="v22Connect" type="button">접속</button><span id="v22Nick" class="nickpill" hidden></span><button id="v22Reroll" type="button" hidden>별명 고르기</button><button id="v22Confirm" type="button" hidden>확정</button></div><div class="line"><button type="button" id="v22Adventure">신나는 모험 배경</button><button type="button" id="v22Chalk">차분한 칠판 배경</button></div><div id="v22Message" class="msg" aria-live="polite"></div></div></header>
 <div class="shell"><div class="stage-wrap"><div class="course-tabs"><button type="button" id="principleTab" class="course-tab active">원리편</button><button type="button" id="advancedTab" class="course-tab">심화편</button></div><div class="stages" id="stages"></div><div class="subtle">여러 단계를 누르면 선택한 단계의 문제가 섞여 나옵니다.</div></div><div class="layout-main"><section class="panel main-panel"><main id="main"></main></section><section class="panel"><div class="rank-duo"><div class="rank-box"><h3 id="currentRankTitle">현 단계 순위</h3><div id="currentRank"></div></div><div class="rank-box"><h3>전체 단계 합산 순위</h3><div id="totalRank"></div></div></div><div class="rank-box class-rank"><h3>반별 순위</h3><div id="classRank"></div></div></section></div><section class="other-ranks panel"><h3>다른 단계 순위표</h3><div class="other-grid" id="otherRanks"></div></section></div>
@@ -644,7 +639,7 @@ function quantityExplanation(){
  const group=document.createElement('div');group.className='v182-clock-layout'+(isRemaining?' v188-time-layout':'');group.append(figure,calculations);wrap.append(group);
  const label=document.createElement('div');label.className='v18-visual-label';label.textContent=isRemaining?`${q.total}시간 중 사용함 ${q.used}시간 · 남음 ${q.answer}시간`:`${q.total}시간 중 ${q.n}/${q.d}은 ${q.used}시간`;wrap.append(label)
  }return wrap;}
- const symbol=q.emoji||'●',used=q.n;
+ const used=q.n;
  const wrap=document.createElement('div');wrap.className='quantity-explanation';
  const head=document.createElement('div');head.className='explanation-head';
  head.textContent=type==='amount'?`전체 ${q.total}${q.unit||'개'}${unitParticle(q.unit||'개','을','를')} ${q.d}묶음으로 나누면 한 묶음은 ${q.k}${q.unit||'개'}${unitParticle(q.unit||'개','이에요','예요')}. ${q.n}묶음이므로 ${q.answer}${q.unit||'개'}입니다.`:`전체 ${q.total}${q.unit||'개'}${unitParticle(q.unit||'개','을','를')} ${q.d}묶음으로 나누면 한 묶음은 ${q.k}${q.unit||'개'}${unitParticle(q.unit||'개','이에요','예요')}. ${q.n}묶음을 사용하고 ${q.d-q.n}묶음이 남아 ${q.answer}${q.unit||'개'}입니다.`;
@@ -653,7 +648,8 @@ function quantityExplanation(){
  for(let i=0;i<q.d;i++){const g=document.createElement('div');g.className='explanation-group '+(type==='remain'?(i<used?'spent':'counted'):(i<used?'counted':'rest'));
  const label=document.createElement('div');label.className='explanation-label';label.textContent=(i+1)+'묶음'+(type==='remain'?(i<used?' · 사용':' · 남음'):(i<used?' · 선택':''));g.appendChild(label);
  const pictures=document.createElement('div');pictures.className='explanation-items';
- for(let j=0;j<q.k;j++){const span=document.createElement('span');span.innerHTML=quantityPictureMarkup(q);pictures.appendChild(span);}g.appendChild(pictures);grid.appendChild(g);}
+ for(let j=0;j<q.k;j++){const span=document.createElement('span');span.innerHTML=quantityPictureMarkup(q);pictures.appendChild(span);}g.appendChild(pictures);
+ grid.appendChild(g);}
  wrap.appendChild(grid);return wrap;
 }
 function gradeMarkup(status){
