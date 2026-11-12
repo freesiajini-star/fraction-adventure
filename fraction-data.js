@@ -36,5 +36,31 @@ const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 const nicknameHTML=name=>!name||name==='—'?'—':`<span class="nick-icon" aria-hidden="true">${NICKNAME_ICONS[name]||'⭐'}</span> ${escape(name)}`;
 function studentRankRows(students,classNo,stage){if(!Number(classNo))return [];return Object.entries(students).filter(([,x])=>Number(x.classNo)===Number(classNo)).map(([key,x])=>{const a=stage==null?x.total:x.stages?.[stage];return {key,name:x.nickname||'동물',cl:Number(x.classNo),studentNo:Number(x.studentNo),correct:Number(a?.correct||0),wrong:Number(a?.wrong||0),score:Number(a?.score||0)}}).filter(x=>x.correct+x.wrong>0).sort((a,b)=>b.score-a.score||b.correct-a.correct||a.wrong-b.wrong||a.studentNo-b.studentNo)}
 function classAverageRanks(students){const classes=new Map();for(const x of Object.values(students)){const c=Number(x.classNo);if(!c||Number(x.total?.correct||0)+Number(x.total?.wrong||0)<=0)continue;const row=classes.get(c)||{classNo:c,count:0,total:0};row.count++;row.total+=Number(x.total?.score||0);classes.set(c,row)}return [...classes.values()].map(x=>({...x,average:x.total/x.count})).sort((a,b)=>b.average-a.average||b.total-a.total||a.classNo-b.classNo)}
-const api={ROOT,GAP,pad,dateKey,monthKey,addDays,sessionsFor,dayTotal,riskFor,applyResults,NICKNAME_ICONS,nicknameText,nicknameHTML,studentRankRows,classAverageRanks};global.FractionData=api;if(typeof module!=='undefined')module.exports=api;
+
+// Keep unchanged students intact and materialize only the fields used by the UI.
+function studentView(snap,includeActivity=true,eventIds=[]){
+ const out={};for(const field of ['classNo','studentNo','nickname','total','stages','currentStage','currentStageAt','presence'])out[field]=snap.child(field).val();
+ if(includeActivity)out.activity=snap.child('activity').val();
+ if(eventIds.length){out.processedEvents={};for(const id of eventIds)if(snap.child('processedEvents/'+id).exists())out.processedEvents[id]=true}
+ return out;
+}
+function dashboardStudent(snap){
+ const out=studentView(snap,false);out.activity={};
+ snap.child('activity').forEach(day=>{
+  const item={sessions:day.child('sessions').val(),locked:day.child('locked').val(),stages:{}};
+  day.child('stages').forEach(stage=>{item.stages[stage.key]={};for(const field of ['totalSolved','correct','wrong'])item.stages[stage.key][field]=stage.child(field).val()});
+  out.activity[day.key]=item;
+ });return out;
+}
+function watchStudents(ref,notify,onError,project=studentView){
+ const students={};let ready=false,closed=false,timer=null;
+ const emit=()=>{if(ready&&!closed&&!timer)timer=setTimeout(()=>{timer=null;if(!closed)notify({...students})},150)};
+ const changed=snap=>{students[snap.key]=project(snap);emit()};
+ const removed=snap=>{delete students[snap.key];emit()};
+ const failed=e=>{if(!closed)onError?.(e)};
+ ref.on('child_added',changed,failed);ref.on('child_changed',changed,failed);ref.on('child_removed',removed,failed);
+ ref.once('value').then(()=>{ready=true;emit()},failed);
+ return {off(){closed=true;clearTimeout(timer);ref.off('child_added',changed);ref.off('child_changed',changed);ref.off('child_removed',removed)}};
+}
+const api={dashboardStudent,studentView,watchStudents,ROOT,GAP,pad,dateKey,monthKey,addDays,sessionsFor,dayTotal,riskFor,applyResults,NICKNAME_ICONS,nicknameText,nicknameHTML,studentRankRows,classAverageRanks};global.FractionData=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
