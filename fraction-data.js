@@ -47,7 +47,7 @@ function studentView(snap,includeActivity=true,eventIds=[]){
 function dashboardStudent(snap){
  const out=studentView(snap,false);out.activity={};
  snap.child('activity').forEach(day=>{
-  const item={sessions:day.child('sessions').val(),locked:day.child('locked').val(),stages:{}};
+  const item={sessions:day.child('sessions').val(),locked:day.child('locked').val(),lastActiveAt:day.child('lastActiveAt').val(),stages:{}};
   day.child('stages').forEach(stage=>{item.stages[stage.key]={};for(const field of ['totalSolved','correct','wrong'])item.stages[stage.key][field]=stage.child(field).val()});
   out.activity[day.key]=item;
  });return out;

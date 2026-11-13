@@ -6,25 +6,29 @@ $('date').value=D.dateKey(new Date());$('date').dataset.followToday='true';
 const fmt=ts=>ts?new Date(Number(ts)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit'}):'—';
 const label=x=>`${D.nicknameText(x.nickname||'동물')} (${x.classNo}-${D.pad(Number(x.studentNo)||0)})`;
 function showError(e){$('error').hidden=false;$('error').textContent='Firebase 오류: '+(e?.message||e);$('connection').textContent='연결 실패';$('connection').className=''}
-function lastPresence(x){return Object.values(x.presence||{}).filter(p=>p.visible&&Math.abs(serverNow()-Number(p.lastSeen||0))<60000).sort((a,b)=>b.lastSeen-a.lastSeen)[0]}
+// One shared presence rule for the summary and every student status.
+function lastPresence(x,now=serverNow()){
+ return Object.values(x.presence||{}).filter(p=>p&&p.visible===true&&Number(p.lastSeen)>0&&now-Number(p.lastSeen)>=-10000&&now-Number(p.lastSeen)<60000).sort((a,b)=>Number(b.lastSeen)-Number(a.lastSeen))[0];
+}
 function learningState(student,now=serverNow()){
- let last=0;
- Object.values(student.activity||{}).forEach(day=>Object.values(day.sessions||{}).forEach(session=>{last=Math.max(last,Number(session.endAt||0))}));
- const presence=lastPresence(student);last=Math.max(last,Number(presence?.lastActivityAt||0));if(!last)return presence?'paused':'inactive';
+ const presence=lastPresence(student,now);
+ if(!presence)return 'inactive';
+ let last=Number(presence.lastActivityAt||0);
+ const today=D.dateKey(new Date(now)),day=student.activity?.[today];
+ last=Math.max(last,Number(day?.lastActiveAt||0));
+ Object.values(day?.sessions||{}).forEach(session=>{last=Math.max(last,Number(session.endAt||0))});
  const minutes=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(now)).split(':').map(Number);
  const night=minutes[0]*60+minutes[1]>=1260||minutes[0]*60+minutes[1]<360;
- const today=D.dateKey(new Date(now)),day=student.activity?.[today];
  const locked=!!day?.locked||D.riskFor(student,today).count>=2;
- const gap=Math.max(0,now-last);
- if(!night&&!locked&&lastPresence(student)&&gap<5*60*1000)return 'active';
- return gap<30*60*1000?'paused':'inactive';
+ if(!night&&!locked&&last>0&&now-last>=-10000&&now-last<5*60*1000)return 'active';
+ return 'connected';
 }
 function status(x,historical=false){
  if(historical)return '<span class="signal"><i></i>지난 기록</span>';
- const state=learningState(x);
- if(state==='active')return '<span class="signal active"><i></i>학습 중 · '+(Number(lastPresence(x)?.stage)||'—')+'단계</span>';
- if(state==='paused')return '<span class="signal paused"><i></i>잠시 멈춤</span>';
- return '<span class="signal"><i></i>활동 없음</span>';
+ const presence=lastPresence(x);
+ if(!presence)return '<span class="signal"><i></i>접속 종료</span>';
+ if(learningState(x)==='active')return '<span class="signal active"><i></i>학습 중 · '+(Number(presence.stage)||'—')+'단계</span>';
+ return '<span class="signal paused"><i></i>접속 중 · 대기</span>';
 }
 const classFilter=x=>selectedClass==='all'||Number(x.classNo)===Number(selectedClass);
 function renderTabs(){const classes=[...new Set(Object.values(allStudents).map(x=>Number(x.classNo)).filter(x=>x>0))].sort((a,b)=>a-b);if(selectedClass!=='all'&&!classes.includes(Number(selectedClass)))selectedClass='all';$('tabs').innerHTML=['all',...classes].map(c=>`<button data-class="${c}" class="${String(c)===String(selectedClass)?'active':''}">${c==='all'?'전체':c+'반'}</button>`).join('');$('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{selectedClass=b.dataset.class;selectedStudent=null;renderAll()})}
@@ -42,7 +46,7 @@ function learningLockBadge(student,date,risk,today){
 }
 
 function renderActivity(){const date=$('date').value,today=D.dateKey(new Date()),historical=date.slice(0,7)!==D.monthKey(new Date());const filtered=Object.entries(allStudents).filter(([,x])=>classFilter(x));const rows=filtered.map(([key,x])=>({key,x,s:D.sessionsFor(x,date),r:D.riskFor(riskStudent(key,x),date)})).filter(o=>o.s.length||(!historical&&date===today&&lastPresence(o.x))).sort((a,b)=>Number(a.x.classNo)-Number(b.x.classNo)||Number(a.x.studentNo)-Number(b.x.studentNo));const todaySource=monthCache.get(D.monthKey(new Date()))||{};const todayRows=Object.values(todaySource).filter(classFilter);
- $('students').textContent=todayRows.filter(x=>lastPresence(x)).length+'명';$('todayStudents').textContent=todayRows.filter(x=>D.sessionsFor(x,today).length).length+'명';$('solves').textContent=rows.reduce((n,o)=>n+o.r.daily,0)+'문제';$('sessions').textContent=rows.reduce((n,o)=>n+o.s.length,0)+'회';$('attentionCount').textContent=rows.filter(o=>o.r.count>=2).length+'명';
+ $('students').textContent=todayRows.filter(x=>!!lastPresence(x)).length+'명';$('todayStudents').textContent=todayRows.filter(x=>D.sessionsFor(x,today).length).length+'명';$('solves').textContent=rows.reduce((n,o)=>n+o.r.daily,0)+'문제';$('sessions').textContent=rows.reduce((n,o)=>n+o.s.length,0)+'회';$('attentionCount').textContent=rows.filter(o=>o.r.count>=2).length+'명';
  $('studentsTable').innerHTML=rows.map((o,i)=>`<tr class="clickable" tabindex="0" data-i="${i}"><td>${esc(label(o.x))}</td><td>${Number(o.x.total?.correct||0)} / ${Number(o.x.total?.totalSolved||0)}</td><td>${o.r.daily}</td><td>${o.s.length}회차</td><td>${fmt(o.s.at(-1)?.endAt)}</td><td>${status(o.x,historical||date!==today)}${learningLockBadge(o.x,date,o.r,today)}</td><td>${o.r.count>=2?`<span class="badge">⚠ 이용패턴 지도 필요 · ${o.r.count}/4</span>`:'<span class="gray">정상 범위</span>'}</td></tr>`).join('')||'<tr><td colspan="7">선택한 날짜에 학습 기록이 없습니다.</td></tr>';
  function showDetail(o){selectedStudent=o.key;const r=o.r,descriptions={daily500:`하루 500문제 이상 (${r.daily}문제)`,threeDays300:'최근 3일 연속 하루 300문제 이상',session200:`한 학습 회차 200문제 이상 (최대 ${r.sessionMax}문제)`,sevenSessions:`하루 7학습 회차 이상 (${r.sessions}회차)`};$('detail').innerHTML=`<h2>${esc(label(o.x))} · 학습 회차</h2><div class="criteria"><strong>${r.count>=2?'⚠ 이용패턴 지도 필요':'이용패턴 지도 기준'} · ${r.count}/4 충족</strong>${Object.entries(descriptions).map(([k,v])=>`<div class="${r.hit[k]?'hit':'miss'}">${r.hit[k]?'✓':'—'} ${v}</div>`).join('')}</div>`+'<div class="criteria"><strong>날짜별 단계 풀이 · '+esc(date)+'</strong>'+Array.from({length:17},(_,i)=>{const n=i+1,a=o.x.activity?.[date]?.stages?.[n];return '<div>'+n+'단계 · '+Number(a?.totalSolved||0)+'문제 (정답 '+Number(a?.correct||0)+' / 오답 '+Number(a?.wrong||0)+')</div>'}).join('')+'<div>단계별 집계는 업데이트 적용 후 기록부터 표시됩니다.</div></div>'+o.s.map((s,j)=>`<div class="session"><span>${j+1}학습 회차 · ${fmt(s.startAt)} ~ ${fmt(s.endAt)}</span><strong>${Number(s.totalSolved??s.solved??0)}문제 (정답 ${Number(s.correct||0)} / 오답 ${Number(s.wrong||0)})</strong></div>`).join('')}
  $('studentsTable').querySelectorAll('tr.clickable').forEach(tr=>{tr.onclick=()=>showDetail(rows[Number(tr.dataset.i)]);tr.onkeydown=e=>{if(e.key==='Enter')tr.click()}});const selected=rows.find(o=>o.key===selectedStudent);if(selected)showDetail(selected);else $('detail').innerHTML='';const counts=Array(24).fill(0);rows.forEach(o=>o.s.forEach(s=>{const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',hourCycle:'h23'}).format(new Date(Number(s.endAt))));counts[hour]++}));chartCache.hourly=counts.map((v,h)=>({v,label:h+'시'}));drawChart('hourly');}
