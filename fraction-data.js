@@ -2,7 +2,7 @@
 'use strict';
 const ROOT='fractionAdventure17/monthly', GAP=30*60*1000;
 const pad=n=>String(n).padStart(2,'0');
-const dateKey=d=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+const dateFormatter=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});const dateKey=d=>dateFormatter.format(d);
 const monthKey=d=>dateKey(d).slice(0,7);
 const addDays=(key,n)=>{const d=new Date(key+'T12:00:00+09:00');d.setUTCDate(d.getUTCDate()+n);return dateKey(d)};
 const sessionsFor=(x,date)=>Object.values(x?.activity?.[date]?.sessions||{}).filter(s=>Number(s.endAt)>0).sort((a,b)=>a.startAt-b.startAt);
@@ -62,5 +62,51 @@ function watchStudents(ref,notify,onError,project=studentView){
  ref.once('value').then(()=>{ready=true;emit()},failed);
  return {off(){closed=true;clearTimeout(timer);ref.off('child_added',changed);ref.off('child_changed',changed);ref.off('child_removed',removed)}};
 }
-const api={dashboardStudent,studentView,watchStudents,ROOT,GAP,pad,dateKey,monthKey,addDays,sessionsFor,dayTotal,riskFor,applyResults,NICKNAME_ICONS,nicknameText,nicknameHTML,studentRankRows,classAverageRanks};global.FractionData=api;if(typeof module!=='undefined')module.exports=api;
+
+// Network scope matters: project(snapshot) runs AFTER Firebase downloads it.
+// Discover keys with shallow REST, then subscribe only to displayed child paths.
+const rosterLoads=new Map();
+async function studentKeys(ref){
+ const directory=ref.parent.child('lightRoster'),cached=(await directory.once('value')).val();if(cached?.v===3)return Object.keys(cached.keys||{});
+ // One-time monthly bootstrap reads nickname leaves only, never student histories.
+ const id=ref.toString();if(rosterLoads.has(id))return rosterLoads.get(id);const job=(async()=>{const found={};for(let c=1;c<=12;c++){const group=await Promise.all(Array.from({length:40},async(_,i)=>{const key='c'+c+'s'+pad(i+1),name=(await ref.child(key+'/nickname').once('value')).val();return name?key:null}));for(const key of group)if(key)found[key]=true}
+ const result=await directory.transaction(value=>({v:3,keys:{...value?.keys,...found}}));return Object.keys(result.snapshot.val()?.keys||{});})();rosterLoads.set(id,job);try{return await job}finally{rosterLoads.delete(id)}
+}
+async function readNicknames(ref,classNo){
+ const keys=(await studentKeys(ref)).filter(key=>key.startsWith('c'+Number(classNo)+'s'));
+ const entries=await Promise.all(keys.map(async key=>[key,{classNo:Number(classNo),nickname:(await ref.child(key+'/nickname').once('value')).val()}]));return Object.fromEntries(entries);
+}
+function watchStudentsLight(ref,notify,onError,project=studentView,ownKey=null,ownOnly=false){
+ const records={},subscriptions=new Map(),dirty=new Set();let closed=false,timer=null,busy=false,own=null,paused=ownKey!==null&&!ownOnly&&!!global.document?.hidden;const directory=ref.parent.child('lightRoster/keys');
+ const empty={val:()=>null,exists:()=>false,forEach:()=>false};
+ const month=ref.parent.key;
+ const dates=()=>{const count=month===monthKey(new Date())?Number(dateKey(new Date()).slice(-2)):new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).getDate();return Array.from({length:count},(_,i)=>month+'-'+pad(i+1))};
+ const flush=()=>{timer=null;if(closed)return;for(const key of dirty){const row=subscriptions.get(key);if(row){const days={};for(const date of dates()){const day={};for(const field of ['t','g','r','s','last','c']){const value=row.snaps['compactV3/days/'+date+'/'+field]?.val();if(value!=null)day[field]=value}if(Object.keys(day).length)days[date]=day}records[key]=global.Ledger3.fold(project({key,child:name=>row.snaps[name]||empty}),days)}}dirty.clear();notify({...records},{ready:[...subscriptions.values()].every(row=>[...row.handlers.keys()].every(field=>Object.hasOwn(row.snaps,field)))})};
+ const changed=key=>{dirty.add(key);if(!timer&&!closed)timer=setTimeout(flush,150)};
+ const listen=(key,field)=>{const row=subscriptions.get(key);if(!row||row.handlers.has(field)||(paused&&ownKey!==null&&key!==own))return;const leaf=ref.child(key+'/'+field),handler=snap=>{if(closed||subscriptions.get(key)!==row)return;row.snaps[field]=snap;if(field==='classNo')refreshStages(key);changed(key)};row.handlers.set(field,[leaf,handler]);leaf.on('value',handler,onError)};
+ const unlisten=(row,field)=>{const item=row.handlers.get(field);if(item){item[0].off('value',item[1]);row.handlers.delete(field);delete row.snaps[field]}};
+ function refreshDays(key){const row=subscriptions.get(key);if(!row)return;const mine=key===own,teacher=ownKey===null,ownClass=Number(/^c(\d+)s/.exec(own||'')?.[1]||0),same=teacher||!!ownClass&&Number(row.snaps.classNo?.val())===ownClass;
+  for(const date of dates())for(const field of ['t','g','r','s','last','c']){const name='compactV3/days/'+date+'/'+field,wanted=field==='t'||(field==='g'&&(teacher||mine))||(field==='r'&&same&&!teacher&&!mine)||((field==='s'||field==='last')&&(teacher||mine))||(field==='c'&&mine);if(wanted)listen(key,name);else unlisten(row,name)}
+ }
+ function refreshStages(key){const row=subscriptions.get(key);if(!row)return;const ownClass=Number(/^c(\d+)s/.exec(own||'')?.[1]||0);if(ownKey===null||(ownClass&&Number(row.snaps.classNo?.val())===ownClass))listen(key,'stages');else unlisten(row,'stages');refreshDays(key)}
+const add=key=>{if(!subscriptions.has(key))subscriptions.set(key,{snaps:{},handlers:new Map()});for(const field of (ownKey===null?['classNo','studentNo','nickname','total','presence','currentStage','currentStageAt']:['classNo','studentNo','nickname','total']))listen(key,field);refreshStages(key);if(ownKey===null||key===own)listen(key,'activity')};
+ const drop=key=>{const row=subscriptions.get(key);if(row)for(const field of [...row.handlers.keys()])unlisten(row,field);subscriptions.delete(key);delete records[key];dirty.delete(key)};
+ function setOwn(key){if(own===key)return;const previous=own;own=key||null;if(previous&&ownKey!==null){const row=subscriptions.get(previous);if(row){unlisten(row,'activity');for(const field of [...row.handlers.keys()])if(field.startsWith('processedEvents/'))unlisten(row,field);changed(previous)}}if(own){add(own);listen(own,'activity');(ownOnly?Promise.resolve():studentKeys(ref)).then(()=>{if(!closed&&own&&!ownOnly)directory.child(own).set(true)}).catch(error=>{if(!closed)onError?.(error)})}for(const key of subscriptions.keys())refreshStages(key)}
+ async function discover(){
+  if(closed||busy)return;busy=true;
+  try{
+   if(ownKey)setOwn(ownKey());
+   const keys=ownOnly?(own?[own]:[]):await studentKeys(ref);if(closed)return;
+   const active=new Set(keys);if(own)active.add(own);
+   for(const key of active)add(key);for(const key of [...subscriptions.keys()])if(!active.has(key))drop(key);
+   if(!timer)timer=setTimeout(flush,150);
+  }catch(error){if(!closed)onError?.(error)}finally{busy=false}
+ }
+ const rosterAdded=snap=>{if(!closed&&/^c[0-9]{1,2}s[0-9]{2}$/.test(snap.key))add(snap.key)};const rosterRemoved=snap=>{if(!closed&&snap.key!==own){drop(snap.key);if(!timer)timer=setTimeout(flush,150)}};
+const dayTimer=setInterval(()=>{for(const key of subscriptions.keys())refreshDays(key)},15000);discover().then(()=>{if(!closed&&!ownOnly){directory.on('child_added',rosterAdded,onError);directory.on('child_removed',rosterRemoved,onError)}});
+ return {setOwn,pause(){if(ownKey===null||ownOnly)return;paused=true;for(const [key,row]of subscriptions)if(key!==own)for(const [field,[leaf,handler]]of row.handlers){leaf.off('value',handler);row.handlers.delete(field)}},resume(){if(closed)return;paused=false;for(const key of subscriptions.keys())add(key)},applyDayLocal(key,days){add(key);const row=subscriptions.get(key);for(const [date,day]of Object.entries(days))for(const field of ['t','g','r','s','last','c']){const value=day[field]??null;row.snaps['compactV3/days/'+date+'/'+field]={val:()=>value}}dirty.add(key);clearTimeout(timer);flush()},watchReceipts(ids){if(!own)return;add(own);const row=subscriptions.get(own),wanted=new Set(ids.map(id=>'processedEvents/'+id));for(const field of [...row.handlers.keys()])if(field.startsWith('processedEvents/')&&!wanted.has(field))unlisten(row,field);for(const field of wanted)listen(own,field)},off(){closed=true;directory.off('child_added',rosterAdded);directory.off('child_removed',rosterRemoved);clearInterval(dayTimer);clearTimeout(timer);for(const key of [...subscriptions.keys()])drop(key)}};
+}
+async function readMonthLight(ref){return new Promise((resolve,reject)=>{let watch;watch=watchStudentsLight(ref,(data,meta)=>{if(meta.ready){watch.off();resolve(data)}},error=>{watch?.off();reject(error)},dashboardStudent)})}
+function watchStudentLight(ref,key,notify,onError){return watchStudentsLight(ref,data=>notify(data[key]||{}),onError,studentView,()=>key,true)}
+const api={watchStudentLight,readMonthLight,studentKeys,readNicknames,watchStudentsLight,dashboardStudent,studentView,watchStudents,ROOT,GAP,pad,dateKey,monthKey,addDays,sessionsFor,dayTotal,riskFor,applyResults,NICKNAME_ICONS,nicknameText,nicknameHTML,studentRankRows,classAverageRanks};global.FractionData=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

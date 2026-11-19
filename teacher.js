@@ -8,7 +8,7 @@ const label=x=>`${D.nicknameText(x.nickname||'동물')} (${x.classNo}-${D.pad(Nu
 function showError(e){$('error').hidden=false;$('error').textContent='Firebase 오류: '+(e?.message||e);$('connection').textContent='연결 실패';$('connection').className=''}
 // One shared presence rule for the summary and every student status.
 function lastPresence(x,now=serverNow()){
- return Object.values(x.presence||{}).filter(p=>p&&p.visible===true&&Number(p.lastSeen)>0&&now-Number(p.lastSeen)>=-10000&&now-Number(p.lastSeen)<60000).sort((a,b)=>Number(b.lastSeen)-Number(a.lastSeen))[0];
+ return Object.values(x.presence||{}).filter(p=>p&&p.visible===true&&Number(p.lastSeen)>0&&now-Number(p.lastSeen)>=-10000&&now-Number(p.lastSeen)<(p.idle?720000:90000)).sort((a,b)=>Number(b.lastSeen)-Number(a.lastSeen))[0];
 }
 function learningState(student,now=serverNow()){
  const presence=lastPresence(student,now);
@@ -58,7 +58,7 @@ function renderRankings(){const historical=rankMonth!==D.monthKey(new Date());co
 function makeChart(type,target,modal=false){const data=chartCache[type],st=chartState[type],W=1000,H=360,L=62,R=22,T=24,B=52,PW=W-L-R,PH=H-T-B,n=data.length,step=PW/Math.max(1,n-1),max=Math.max(5,Math.ceil(Math.max(1,...data.map(d=>d.v))/5)*5),x=i=>L+(i-(n-1)/2)*step*st.scale+PW/2-st.offset*step,clip='clip-'+type+(modal?'-modal':'');let svg=`<svg class="chartSvg" role="img" aria-label="${type==='daily'?'일별 학습자 수':'시간대별 학습 회차'}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><defs><clipPath id="${clip}"><rect x="${L}" y="${T}" width="${PW}" height="${PH}"/></clipPath></defs>`;for(let j=0;j<=4;j++){const y=T+PH-j*PH/4;svg+=`<line class="gridline" x1="${L}" x2="${W-R}" y1="${y}" y2="${y}"/><text x="${L-10}" y="${y+4}" text-anchor="end">${Math.round(max*j/4)}</text>`}svg+=`<line class="axis" x1="${L}" x2="${W-R}" y1="${T+PH}" y2="${T+PH}"/><g clip-path="url(#${clip})">`;if(type==='daily'){const pts=data.map((d,i)=>[x(i),T+PH-d.v/max*PH]);svg+=`<polyline class="linePath" points="${pts.map(p=>p.join(',')).join(' ')}"/>`+pts.map((p,i)=>`<circle class="point" cx="${p[0]}" cy="${p[1]}" r="5"><title>${esc(data[i].label)}: ${data[i].v}명</title></circle>`).join('')}else svg+=data.map((d,i)=>{const h=d.v/max*PH;return `<rect class="barRect" x="${x(i)-12}" y="${T+PH-h}" width="24" height="${h}" rx="4"><title>${esc(d.label)}: ${d.v}학습 회차</title></rect>`}).join('');svg+='</g>';data.forEach((d,i)=>{if(i%(st.scale>1.6?1:3)===0||i===n-1)svg+=`<text x="${x(i)}" y="${H-17}" text-anchor="middle">${esc(d.label)}</text>`});target.innerHTML=svg+'</svg>'}
 function drawChart(type){makeChart(type,$(type));if($('chartModal').classList.contains('open')&&$('chartModalChart').dataset.type===type)makeChart(type,$('chartModalChart'),true)}
 function bindChart(el,type){let down=null;const get=()=>type||el.dataset.type;const draw=()=>makeChart(get(),el,!type);el.addEventListener('pointerdown',e=>{down={x:e.clientX,offset:chartState[get()].offset};el.classList.add('dragging');el.setPointerCapture(e.pointerId)});el.addEventListener('pointermove',e=>{if(!down)return;chartState[get()].offset=down.offset-(e.clientX-down.x)/80;draw()});for(const evt of ['pointerup','pointercancel'])el.addEventListener(evt,()=>{down=null;el.classList.remove('dragging')});el.addEventListener('wheel',e=>{e.preventDefault();const st=chartState[get()];st.scale=Math.max(1,Math.min(4,st.scale*(e.deltaY<0?1.15:.87)));draw()},{passive:false});el.addEventListener('dblclick',()=>openChart(get()))}
-async function loadMonth(month){if(month===activeMonth)return allStudents;if(monthCache.has(month))return monthCache.get(month);const snap=await db.ref(D.ROOT+'/'+month+'/students').once('value');const data={};snap.forEach(child=>{data[child.key]=D.dashboardStudent(child)});monthCache.set(month,data);return data}
+async function loadMonth(month){if(month===activeMonth)return allStudents;if(monthCache.has(month))return monthCache.get(month);const data=await D.readMonthLight(db.ref(D.ROOT+'/'+month+'/students'));monthCache.set(month,data);return data}
 async function renderDaily(){if(!db)return;const request=++dailyRequest,days=Array.from({length:14},(_,i)=>D.addDays($('date').value,i-13));try{await Promise.all([...new Set(days.map(d=>d.slice(0,7)))].map(loadMonth));if(request!==dailyRequest)return;chartCache.daily=days.map(day=>({label:day.slice(5).replace('-','/'),v:Object.values(monthCache.get(day.slice(0,7))||{}).filter(x=>classFilter(x)&&D.sessionsFor(x,day).length).length}));drawChart('daily')}catch(e){showError(e)}}
 function renderStageStats(){
   const month=$('date').value.slice(0,7);
@@ -99,7 +99,7 @@ function queuePresenceRender(){if(!dataRenderTimer&&!activityRenderTimer)activit
 function sharedMonth(month,role){
  let entry=subscriptions.get(month);
  if(!entry){entry={roles:new Set(),data:{},stamp:null};subscriptions.set(month,entry);
-  entry.watch=D.watchStudents(db.ref(D.ROOT+'/'+month+'/students'),data=>{
+  entry.watch=D.watchStudentsLight(db.ref(D.ROOT+'/'+month+'/students'),data=>{
    entry.data=data;monthCache.set(month,data);
    if(entry.roles.has('activity'))allStudents=data;if(entry.roles.has('rank'))rankStudents=data;
    $('connection').textContent='Firebase 연결됨 · '+activeMonth+' · 실시간';$('connection').className='ok';$('error').hidden=true;
